@@ -1,0 +1,2 @@
+# AzureCostInventory
+Azure Cost Inventory
