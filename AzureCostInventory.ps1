@@ -2,11 +2,11 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.55                                                                  #
+#       Version: 0.0.56                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
-#       Date: 12/09/2020                                                                 #
+#       Date: 12/10/2020                                                                 #
 #                                                                                        #
 #           https://github.com/RenatoGregio/AzureCostInventory                           #
 #                                                                                        #
@@ -31,7 +31,7 @@ $CSPath = "$HOME/AzureInventory"
 $Global:tableStyle = "Light20"
 $Global:Subscriptions = ''
 $Global:Today = Get-Date
-$Global:Months = 2
+$Global:Months = 4
 
 $Runtime = Measure-Command {
 
@@ -217,14 +217,14 @@ function Extractor
 
             Get-Job | Wait-Job
 
-            $ResourceGroups = Receive-Job -Name 'Resource Group Inventory'
+            $Global:ResourceGroups = Receive-Job -Name 'Resource Group Inventory'
 
         $EndDate = Get-Date -Year $Today.Year -Month $Today.Month -Day $Today.Day -Hour 0 -Minute 0 -Second 0 -Millisecond 0
         $EndDateMode = Get-Date -Year $Today.Year -Month $Today.Month -Day 1 -Hour 0 -Minute 0 -Second 0 -Millisecond 0
         $StartDate = ($EndDateMode).AddMonths(-$Months)
 
-        $EndDate = ($EndDate.ToString("yyyy-MM-dd")+'T23:59:59').ToString()
-        $StartDate = ($StartDate.ToString("yyyy-MM-dd")+'T00:00:00').ToString()
+        $Global:EndDate = ($EndDate.ToString("yyyy-MM-dd")+'T23:59:59').ToString()
+        $Global:StartDate = ($StartDate.ToString("yyyy-MM-dd")+'T00:00:00').ToString()
 
        
         Foreach ($Subscription in $Subscriptions)
@@ -286,6 +286,7 @@ function Extractor
                                     {
                                         $Results = (get-variable -name ('SubValue'+$rg.Name)).Value
                                         $obj = @{
+                                                'ID' = $rg.id;
                                                 'Subscription' = $($args[0]).name;
                                                 'Resource Group' = $rg.name;
                                                 'Location' = $rg.Location;
@@ -324,6 +325,7 @@ function Extractor
                             $SubName = $RG.Subscription
                             $ResourceGroup = $RG.'Resource Group'
                             $Location = $RG.Location
+                            $ID = $RG.ID
                             Foreach ($Row in $RG.Usage.rows)
                                 {
                                     if($null -ne $Row[3])
@@ -334,6 +336,7 @@ function Extractor
                                             $DateYear = (([datetime]$Date0).ToString("yyyy")).ToString()
 
                                             $obj = @{
+                                                    'ID' = $ID;
                                                     'Subscription' = $SubName;
                                                     'Resource Group' = $ResourceGroup;
                                                     'Location' = $Location;
@@ -350,7 +353,6 @@ function Extractor
                     $tmp
 
                     } -ArgumentList $InvSub | Out-Null
-
             }
 
         Get-Job | Wait-Job | Out-Null
@@ -368,6 +370,7 @@ function DataConsolidation
             }
 
     }
+
 
 function Report 
     {
