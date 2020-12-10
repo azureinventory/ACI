@@ -2,7 +2,7 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.54                                                                  #
+#       Version: 0.0.55                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
@@ -34,8 +34,6 @@ $Global:Today = Get-Date
 $Global:Months = 2
 
 $Runtime = Measure-Command {
-
-#$Global:File = 'C:\AzureInventory\Costs.xlsx'
 
 <######################################### Help ################################################>
 
@@ -355,11 +353,7 @@ function Extractor
 
             }
 
-
-        Write-Debug ('Waiting Data Processing Jobs..')
         Get-Job | Wait-Job | Out-Null
-
-        Write-Debug ('Done with data processing..')
     }
 
 
@@ -488,6 +482,7 @@ function Report
 Extractor
 Inventory
 DataProcessor
+DataConsolidation 
 Report
 
 
@@ -495,3 +490,8 @@ Report
 $Measure = $Runtime.Totalminutes.ToString('#######.##')
 
 Write-Host ('Report Complete. Total Runtime was: ' + $Measure + ' Minutes')
+
+Write-Host ''
+Write-Host ('Excel file saved at: ') -NoNewline
+write-host $File -ForegroundColor Cyan
+Write-Host ''
