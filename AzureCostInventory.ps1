@@ -2,7 +2,7 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.57                                                                  #
+#       Version: 0.0.58                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
@@ -21,6 +21,9 @@
 #                                                                                        #
 ##########################################################################################
 
+
+param ($TenantID, $PassedMonhs = 2,$SubscriptionID) 
+
 if ($DebugPreference -eq 'Inquire') {
     $DebugPreference = 'Continue'
 }
@@ -31,7 +34,7 @@ $CSPath = "$HOME/AzureInventory"
 $Global:tableStyle = "Light20"
 $Global:Subscriptions = ''
 $Global:Today = Get-Date
-$Global:Months = 2
+$Global:Months = $PassedMonhs
 
 $Runtime = Measure-Command {
 
@@ -161,7 +164,6 @@ function Extractor
         if ((Test-Path -Path $DefaultPath -PathType Container) -eq $false) {
             New-Item -Type Directory -Force -Path $DefaultPath | Out-Null
         }
-
     }
 
     function Inventory {
@@ -235,12 +237,15 @@ function Extractor
 "{\"totalCost\":{\"name\":\"PreTaxCost\",\"function\":\"Sum\"}}"
 '@
                 $Sub = $($args[0]).id
+                $RGS = @()
                 Foreach($ResourceG in $($args[3]))
                     {
-                        foreach ($rg in $ResourceG)
+                        $RGS +=  $ResourceG | Where-Object {$_.id.split('/')[2] -eq $Sub}
+                    }
+
+                        foreach ($rg in $RGS)
                             {
-                                $rgv = $rg | Where-Object {$_.id.split('/')[2] -eq $Sub}
-                                if($null -ne $rgv -and $rgv -ne '')
+                                if($rg | Where-Object {$_.id.split('/')[2] -eq $Sub})
                                     {
                                         $Scope = $rg.ID
 
@@ -256,31 +261,23 @@ function Extractor
                                         $job += (get-variable -name ('SubJob'+$rg.Name)).Value
                                     }
                             }
-                    }
 
                 while ($Job.Runspace.IsCompleted -contains $false) {}
 
-                Foreach($ResourceG in $($args[3]))
-                    {
-                        foreach ($rg in $ResourceG)
+                        foreach ($rg in $RGS)
                             {
-                                $rgv = $rg | Where-Object {$_.id.split('/')[2] -eq $Sub}
-                                if($null -ne $rgv -and $rgv -ne '')
+                                if($rg | Where-Object {$_.id.split('/')[2] -eq $Sub})
                                     {    
                                         New-Variable -Name ('SubValue'+$rg.Name)
                                         Set-Variable -Name ('SubValue'+$rg.Name) -Value (((get-variable -name ('SubRun'+$rg.Name)).Value).EndInvoke((get-variable -name ('SubJob'+$rg.Name)).Value))
                                     }
                             }        
-                    }
 
                 $Result = @()
 
-                Foreach($ResourceG in $($args[3]))
-                    {
-                        foreach ($rg in $ResourceG)
+                        foreach ($rg in $RGS)
                             {
-                                $rgv = $rg | Where-Object {$_.id.split('/')[2] -eq $Sub}
-                                if($null -ne $rgv -and $rgv -ne '')
+                                if($rg | Where-Object {$_.id.split('/')[2] -eq $Sub})
                                     {
                                         $Results = (get-variable -name ('SubValue'+$rg.Name)).Value
                                         $obj = @{
@@ -293,15 +290,15 @@ function Extractor
                                     }
                                 $Result += $obj
                             }
-                    }
                 $Result
                 } -ArgumentList $Subscription,$StartDate,$EndDate,$ResourceGroups | Out-Null
             }
             Write-host ('Waiting First Jobs')
             Get-Job | Wait-Job | Out-Null
-    
         }
 
+                                                        #$Subscription = $Subscriptions | where {$_.Name -eq 'Express-Route'}
+                                                        #$ResourceGroups.Name | where {$_ -eq 'DITEC'}
     function DataProcessor 
     {
         Write-host ('Starting Second Jobs')
@@ -310,44 +307,42 @@ function Extractor
             { 
                 $InvSub = Receive-Job -Name ('Usage Inventory'+$Subscription.id)
 
+                #$InvSub.ID | Select-Object -Property ID -Unique
+
                 Start-Job -Name ('Cost Processing'+$Subscription.id) -ScriptBlock {
 
-                    $tmp = @()
-                    
-                    Foreach ($RG in $args) 
-                        {
-                            $SubName = $RG.Subscription
-                            $ResourceGroup = $RG.'Resource Group'
-                            $Location = $RG.Location
-                            $ID = $RG.ID
-                            Add-Content -Path 'C:\AzureInventory\usage.log' -Value ($RG.Usage)
-                            Foreach ($Row in $RG.Usage.rows)
-                                {
-                                    if($null -ne $Row[3])
-                                        {
-                                            Add-Content -Path 'C:\AzureInventory\usage.log' -Value ($Row)
-                                            $Date0 = [datetime]::ParseExact($Row[1], 'yyyyMMdd', $null)
-                                            $Date = (([datetime]$Date0).ToString("MM/dd/yyyy")).ToString()
-                                            $DateMonth = ((Get-Culture).DateTimeFormat.GetMonthName(([datetime]$Date0).ToString("MM"))).ToString()
-                                            $DateYear = (([datetime]$Date0).ToString("yyyy")).ToString()
+                        $tmp = @()
+                        Foreach ($RG in $args) 
+                            {
+                                $SubName = $RG.Subscription
+                                $ResourceGroup = $RG.'Resource Group'
+                                $Location = $RG.Location
+                                $ID = $RG.ID
+                                Foreach ($Row in $RG.Usage.rows)
+                                    {
+                                        if($null -ne $Row[3] -and $Row[3] -ne 0 -and $Row[3] -ne '0' -and $Row[3] -ne '')
+                                            {
+                                                $Date0 = [datetime]::ParseExact($Row[1], 'yyyyMMdd', $null)
+                                                $Date = (([datetime]$Date0).ToString("MM/dd/yyyy")).ToString()
+                                                $DateMonth = ((Get-Culture).DateTimeFormat.GetMonthName(([datetime]$Date0).ToString("MM"))).ToString()
+                                                $DateYear = (([datetime]$Date0).ToString("yyyy")).ToString()
 
-                                            $obj = @{
-                                                    'ID' = $ID;
-                                                    'Subscription' = $SubName;
-                                                    'Resource Group' = $ResourceGroup;
-                                                    'Location' = $Location;
-                                                    'Date' = $Date;
-                                                    'Month' = $DateMonth;
-                                                    'Year' = $DateYear;
-                                                    'Currency' = $Row[3];
-                                                    'Cost' = [decimal]$Row[0]  
-                                                }
-                                            $tmp += $obj
-                                        }
-                                }
-                        }
-                    $tmp
-
+                                                $obj = @{
+                                                        'ID' = $ID;
+                                                        'Subscription' = $SubName;
+                                                        'Resource Group' = $ResourceGroup;
+                                                        'Location' = $Location;
+                                                        'Date' = $Date;
+                                                        'Month' = $DateMonth;
+                                                        'Year' = $DateYear;
+                                                        'Currency' = $Row[3];
+                                                        'Cost' = [decimal]$Row[0]  
+                                                    }
+                                                $tmp += $obj
+                                            }
+                                    }
+                            }
+                        $tmp
                     } -ArgumentList $InvSub | Out-Null
             }
 
@@ -473,15 +468,14 @@ function Report
 
             Close-ExcelPackage $excel 
 
-
     }            
 
 
 Extractor
 Inventory
-DataProcessor
-DataConsolidation 
-Report
+#DataProcessor
+#DataConsolidation 
+#Report
 
 
 }
