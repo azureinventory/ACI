@@ -2,7 +2,7 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.56                                                                  #
+#       Version: 0.0.57                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
@@ -31,7 +31,7 @@ $CSPath = "$HOME/AzureInventory"
 $Global:tableStyle = "Light20"
 $Global:Subscriptions = ''
 $Global:Today = Get-Date
-$Global:Months = 4
+$Global:Months = 2
 
 $Runtime = Measure-Command {
 
@@ -170,7 +170,6 @@ function Extractor
 
         <###################################################### JOBs ######################################################################>
 
-        Write-Debug ('Starting Jobs Steps.')
         Get-Job | Remove-Job
 
         Write-host ('Starting First Jobs')
@@ -215,22 +214,21 @@ function Extractor
             $Result
             } -ArgumentList $Subscriptions
 
-            Get-Job | Wait-Job
+            Get-Job | Wait-Job | Out-Null
 
-            $Global:ResourceGroups = Receive-Job -Name 'Resource Group Inventory'
+            $ResourceGroups = Receive-Job -Name 'Resource Group Inventory'
 
         $EndDate = Get-Date -Year $Today.Year -Month $Today.Month -Day $Today.Day -Hour 0 -Minute 0 -Second 0 -Millisecond 0
         $EndDateMode = Get-Date -Year $Today.Year -Month $Today.Month -Day 1 -Hour 0 -Minute 0 -Second 0 -Millisecond 0
         $StartDate = ($EndDateMode).AddMonths(-$Months)
 
-        $Global:EndDate = ($EndDate.ToString("yyyy-MM-dd")+'T23:59:59').ToString()
-        $Global:StartDate = ($StartDate.ToString("yyyy-MM-dd")+'T00:00:00').ToString()
+        $EndDate = ($EndDate.ToString("yyyy-MM-dd")+'T23:59:59').ToString()
+        $StartDate = ($StartDate.ToString("yyyy-MM-dd")+'T00:00:00').ToString()
 
        
         Foreach ($Subscription in $Subscriptions)
             { 
 
-                Write-Debug ('Starting Job: Usage Inventory')
                 Start-Job -Name ('Usage Inventory'+$Subscription.id) -ScriptBlock {
             
                 $Dateset = @'
@@ -299,18 +297,13 @@ function Extractor
                 $Result
                 } -ArgumentList $Subscription,$StartDate,$EndDate,$ResourceGroups | Out-Null
             }
-
-        Get-Job | Wait-Job
+            Write-host ('Waiting First Jobs')
+            Get-Job | Wait-Job | Out-Null
     
         }
 
     function DataProcessor 
     {
-
-        Write-Debug ('Waiting Extraction Jobs..')
-        Write-host ('Waiting First Jobs')
-        get-job | Wait-Job | Out-Null
-
         Write-host ('Starting Second Jobs')
 
         Foreach ($Subscription in $Subscriptions)
@@ -320,16 +313,19 @@ function Extractor
                 Start-Job -Name ('Cost Processing'+$Subscription.id) -ScriptBlock {
 
                     $tmp = @()
+                    
                     Foreach ($RG in $args) 
                         {
                             $SubName = $RG.Subscription
                             $ResourceGroup = $RG.'Resource Group'
                             $Location = $RG.Location
                             $ID = $RG.ID
+                            Add-Content -Path 'C:\AzureInventory\usage.log' -Value ($RG.Usage)
                             Foreach ($Row in $RG.Usage.rows)
                                 {
                                     if($null -ne $Row[3])
                                         {
+                                            Add-Content -Path 'C:\AzureInventory\usage.log' -Value ($Row)
                                             $Date0 = [datetime]::ParseExact($Row[1], 'yyyyMMdd', $null)
                                             $Date = (([datetime]$Date0).ToString("MM/dd/yyyy")).ToString()
                                             $DateMonth = ((Get-Culture).DateTimeFormat.GetMonthName(([datetime]$Date0).ToString("MM"))).ToString()
@@ -344,7 +340,7 @@ function Extractor
                                                     'Month' = $DateMonth;
                                                     'Year' = $DateYear;
                                                     'Currency' = $Row[3];
-                                                    'Cost' = [decimal]$Row[0];  
+                                                    'Cost' = [decimal]$Row[0]  
                                                 }
                                             $tmp += $obj
                                         }
@@ -355,26 +351,26 @@ function Extractor
                     } -ArgumentList $InvSub | Out-Null
             }
 
+        Write-host ('Waiting Second Jobs')
         Get-Job | Wait-Job | Out-Null
     }
 
 
 function DataConsolidation 
     {
-
+        Get-Job | Wait-Job | Out-Null
+        Write-host ('Consolidating Data')
         $Global:Data = @()
         Foreach ($Subscription in $Subscriptions)
             { 
                 $DataTemp = Receive-Job -Name ('Cost Processing'+$Subscription.id)
                 $Global:Data += $DataTemp
             }
-
     }
 
 
 function Report 
     {
-        Write-Debug ('Starting To Generate Report..')
 
         Write-host ('Starting Reporting')
 
@@ -474,7 +470,6 @@ function Report
             }
     
             Add-PivotTable @PTParams
-
 
             Close-ExcelPackage $excel 
 
