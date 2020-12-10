@@ -2,7 +2,7 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.52                                                                  #
+#       Version: 0.0.54                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
@@ -222,17 +222,13 @@ function Extractor
             $ResourceGroups = Receive-Job -Name 'Resource Group Inventory'
 
         $EndDate = Get-Date -Year $Today.Year -Month $Today.Month -Day $Today.Day -Hour 0 -Minute 0 -Second 0 -Millisecond 0
-        $StartDate = ($EndDate).AddMonths(-$Months)
+        $EndDateMode = Get-Date -Year $Today.Year -Month $Today.Month -Day 1 -Hour 0 -Minute 0 -Second 0 -Millisecond 0
+        $StartDate = ($EndDateMode).AddMonths(-$Months)
 
         $EndDate = ($EndDate.ToString("yyyy-MM-dd")+'T23:59:59').ToString()
         $StartDate = ($StartDate.ToString("yyyy-MM-dd")+'T00:00:00').ToString()
 
-
-
-
-
-
-        
+       
         Foreach ($Subscription in $Subscriptions)
             { 
 
@@ -302,25 +298,12 @@ function Extractor
                             }
                     }
                 $Result
-                } -ArgumentList $Subscription,$StartDate,$EndDate,$ResourceGroups
+                } -ArgumentList $Subscription,$StartDate,$EndDate,$ResourceGroups | Out-Null
             }
 
         Get-Job | Wait-Job
     
         }
-
-<#
-        get-job | Select-Object Name
-
-        $s = Receive-Job -Name 'Usage Inventory3d5f753d-ef56-4b30-97c3-fb1860e8f22c'
-
-        $s.Usage
-
-        Foreach($a in $s) {}
-        Foreach($i in $a.Usage.Rows) {}
-
-        $i
-        #>
 
     function DataProcessor 
     {
@@ -331,49 +314,46 @@ function Extractor
 
         Write-host ('Starting Second Jobs')
 
-        $ResultData = @()
-
         Foreach ($Subscription in $Subscriptions)
             { 
                 $InvSub = Receive-Job -Name ('Usage Inventory'+$Subscription.id)
-                $ResultData += $InvSub
-            }
 
-        Write-Debug ('Starting to Process Collected Data..')
+                Start-Job -Name ('Cost Processing'+$Subscription.id) -ScriptBlock {
 
-        Start-Job -Name 'Cost Processing' -ScriptBlock {
-
-            #$Date0 = [datetime]::ParseExact($ra[1], 'yyyyMMdd', $null)
-
-            $tmp = @()
-            Foreach ($RG in $args) 
-                {
-                    $SubName = $RG.Subscription
-                    $ResourceGroup = $RG.'Resource Group'
-                    $Location = $RG.Location
-                    Foreach ($Row in $RG.Usage.rows)
+                    $tmp = @()
+                    Foreach ($RG in $args) 
                         {
-                            $Date0 = [datetime]::ParseExact($Row[1], 'yyyyMMdd', $null)
-                            $Date = (([datetime]$Date0).ToString("MM/dd/yyyy")).ToString()
-                            $DateMonth = ((Get-Culture).DateTimeFormat.GetMonthName(([datetime]$Date0).ToString("MM"))).ToString()
-                            $DateYear = (([datetime]$Date0).ToString("yyyy")).ToString()
+                            $SubName = $RG.Subscription
+                            $ResourceGroup = $RG.'Resource Group'
+                            $Location = $RG.Location
+                            Foreach ($Row in $RG.Usage.rows)
+                                {
+                                    if($null -ne $Row[3])
+                                        {
+                                            $Date0 = [datetime]::ParseExact($Row[1], 'yyyyMMdd', $null)
+                                            $Date = (([datetime]$Date0).ToString("MM/dd/yyyy")).ToString()
+                                            $DateMonth = ((Get-Culture).DateTimeFormat.GetMonthName(([datetime]$Date0).ToString("MM"))).ToString()
+                                            $DateYear = (([datetime]$Date0).ToString("yyyy")).ToString()
 
-                            $obj = @{
-                                    'Subscription' = $SubName;
-                                    'Resource Group' = $ResourceGroup;
-                                    'Location' = $Location;
-                                    'Date' = $Date;
-                                    'Month' = $DateMonth;
-                                    'Year' = $DateYear;
-                                    'Currency' = $Row[3];
-                                    'Cost' = [decimal]$Row[0];  
+                                            $obj = @{
+                                                    'Subscription' = $SubName;
+                                                    'Resource Group' = $ResourceGroup;
+                                                    'Location' = $Location;
+                                                    'Date' = $Date;
+                                                    'Month' = $DateMonth;
+                                                    'Year' = $DateYear;
+                                                    'Currency' = $Row[3];
+                                                    'Cost' = [decimal]$Row[0];  
+                                                }
+                                            $tmp += $obj
+                                        }
                                 }
-                            $tmp += $obj
                         }
-                }
-            $tmp
+                    $tmp
 
-            } -ArgumentList $ResultData | Out-Null
+                    } -ArgumentList $InvSub | Out-Null
+
+            }
 
 
         Write-Debug ('Waiting Data Processing Jobs..')
@@ -382,13 +362,24 @@ function Extractor
         Write-Debug ('Done with data processing..')
     }
 
+
+function DataConsolidation 
+    {
+
+        $Global:Data = @()
+        Foreach ($Subscription in $Subscriptions)
+            { 
+                $DataTemp = Receive-Job -Name ('Cost Processing'+$Subscription.id)
+                $Global:Data += $DataTemp
+            }
+
+    }
+
 function Report 
     {
         Write-Debug ('Starting To Generate Report..')
 
         Write-host ('Starting Reporting')
-
-        $Data = Receive-Job -Name 'Cost Processing'
 
         $StyleOver = New-ExcelStyle -Range A1:AF1 -Bold -FontSize 28 -BackgroundColor ([System.Drawing.Color]::YellowGreen) -Merge -HorizontalAlignment Center
         ('Currency: '+$Data.currency[0]) | Export-Excel -Path $File -WorksheetName 'Overview' -Style $StyleOver -MoveToStart -KillExcel
