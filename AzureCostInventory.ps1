@@ -2,7 +2,7 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.58                                                                  #
+#       Version: 0.0.59                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
@@ -220,13 +220,12 @@ function Extractor
 
             $ResourceGroups = Receive-Job -Name 'Resource Group Inventory'
 
-        $EndDate = Get-Date -Year $Today.Year -Month $Today.Month -Day $Today.Day -Hour 0 -Minute 0 -Second 0 -Millisecond 0
+        $EndDate = Get-Date -Year $Today.Year -Month $Today.Month -Day ($Today.Day -1) -Hour 23 -Minute 59 -Second 59 -Millisecond 0
         $EndDateMode = Get-Date -Year $Today.Year -Month $Today.Month -Day 1 -Hour 0 -Minute 0 -Second 0 -Millisecond 0
         $StartDate = ($EndDateMode).AddMonths(-$Months)
 
         $EndDate = ($EndDate.ToString("yyyy-MM-dd")+'T23:59:59').ToString()
         $StartDate = ($StartDate.ToString("yyyy-MM-dd")+'T00:00:00').ToString()
-
        
         Foreach ($Subscription in $Subscriptions)
             { 
@@ -245,8 +244,6 @@ function Extractor
 
                         foreach ($rg in $RGS)
                             {
-                                if($rg | Where-Object {$_.id.split('/')[2] -eq $Sub})
-                                    {
                                         $Scope = $rg.ID
 
                                         New-Variable -Name ('SubRun'+$rg.Name)
@@ -259,26 +256,20 @@ function Extractor
                                         Set-Variable -Name ('SubJob'+$rg.Name) -Value ((get-variable -name ('SubRun'+$rg.Name)).Value).BeginInvoke()
 
                                         $job += (get-variable -name ('SubJob'+$rg.Name)).Value
-                                    }
                             }
 
                 while ($Job.Runspace.IsCompleted -contains $false) {}
 
                         foreach ($rg in $RGS)
-                            {
-                                if($rg | Where-Object {$_.id.split('/')[2] -eq $Sub})
-                                    {    
+                            {   
                                         New-Variable -Name ('SubValue'+$rg.Name)
                                         Set-Variable -Name ('SubValue'+$rg.Name) -Value (((get-variable -name ('SubRun'+$rg.Name)).Value).EndInvoke((get-variable -name ('SubJob'+$rg.Name)).Value))
-                                    }
                             }        
 
                 $Result = @()
 
                         foreach ($rg in $RGS)
                             {
-                                if($rg | Where-Object {$_.id.split('/')[2] -eq $Sub})
-                                    {
                                         $Results = (get-variable -name ('SubValue'+$rg.Name)).Value
                                         $obj = @{
                                                 'ID' = $rg.id;
@@ -287,7 +278,6 @@ function Extractor
                                                 'Location' = $rg.Location;
                                                 'Usage' = $Results
                                                 }
-                                    }
                                 $Result += $obj
                             }
                 $Result
@@ -473,9 +463,9 @@ function Report
 
 Extractor
 Inventory
-#DataProcessor
-#DataConsolidation 
-#Report
+DataProcessor
+DataConsolidation 
+Report
 
 
 }
