@@ -2,7 +2,7 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.61                                                                  #
+#       Version: 0.0.62                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
@@ -287,6 +287,7 @@ function Extractor
             Get-Job | Wait-Job | Out-Null
         }
 
+
     function DataProcessor 
     {
         Write-host ('Starting Second Jobs')
@@ -300,15 +301,40 @@ function Extractor
                         $tmp = @()
                         Foreach ($RG in $args) 
                             {
-                                $SubName = $RG.Subscription
-                                $ResourceGroup = $RG.'Resource Group'
-                                $Location = $RG.Location
-                                $ID = $RG.ID
-                                Foreach ($Row in $RG.Usage.rows)
+                                if($RG.Usage.Rows)
                                     {
-                                        if($null -ne $Row[3] -and $Row[3] -ne 0 -and $Row[3] -ne '0' -and $Row[3] -ne '')
+                                        $SubName = $RG.Subscription
+                                        $ResourceGroup = $RG.'Resource Group'
+                                        $Location = $RG.Location
+                                        $ID = $RG.ID
+                                        if($RG.Usage.rows.count -gt 4)
                                             {
-                                                $Date0 = [datetime]::ParseExact($Row[1], 'yyyyMMdd', $null)
+                                                Foreach ($Row in $RG.Usage.rows)
+                                                    {
+                                                        $Date0 = [datetime]::ParseExact($Row[1], 'yyyyMMdd', $null)
+                                                        $WeekDay = $Date0.DayOfWeek
+                                                        $Date = (([datetime]$Date0).ToString("MM/dd/yyyy")).ToString()
+                                                        $DateMonth = ((Get-Culture).DateTimeFormat.GetMonthName(([datetime]$Date0).ToString("MM"))).ToString()
+                                                        $DateYear = (([datetime]$Date0).ToString("yyyy")).ToString()
+
+                                                        $obj = @{
+                                                                'ID' = $ID;
+                                                                'Subscription' = $SubName;
+                                                                'Resource Group' = $ResourceGroup;
+                                                                'Location' = $Location;
+                                                                'Date' = $Date;
+                                                                'Day of Week' = [string]$WeekDay;
+                                                                'Month' = $DateMonth;
+                                                                'Year' = $DateYear;
+                                                                'Currency' = $Row[3];
+                                                                'Cost' = '{0:C}' -f $Row[0]  
+                                                            }
+                                                        $tmp += $obj
+                                                    }
+                                            }
+                                        else 
+                                            {
+                                                $Date0 = [datetime]::ParseExact($RG[1], 'yyyyMMdd', $null)
                                                 $WeekDay = $Date0.DayOfWeek
                                                 $Date = (([datetime]$Date0).ToString("MM/dd/yyyy")).ToString()
                                                 $DateMonth = ((Get-Culture).DateTimeFormat.GetMonthName(([datetime]$Date0).ToString("MM"))).ToString()
@@ -320,15 +346,15 @@ function Extractor
                                                         'Resource Group' = $ResourceGroup;
                                                         'Location' = $Location;
                                                         'Date' = $Date;
-                                                        'Day of Week' = $WeekDay;
+                                                        'Day of Week' = [string]$WeekDay;
                                                         'Month' = $DateMonth;
                                                         'Year' = $DateYear;
-                                                        'Currency' = $Row[3];
-                                                        'Cost' = [decimal]$Row[0]  
+                                                        'Currency' = $RG[3];
+                                                        'Cost' = '{0:C}' -f $RG[0]  
                                                     }
                                                 $tmp += $obj
                                             }
-                                    }
+                                    }   
                             }
                         $tmp
                     } -ArgumentList $InvSub | Out-Null
