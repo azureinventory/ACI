@@ -2,7 +2,7 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.59                                                                  #
+#       Version: 0.0.60                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
@@ -287,8 +287,6 @@ function Extractor
             Get-Job | Wait-Job | Out-Null
         }
 
-                                                        #$Subscription = $Subscriptions | where {$_.Name -eq 'Express-Route'}
-                                                        #$ResourceGroups.Name | where {$_ -eq 'DITEC'}
     function DataProcessor 
     {
         Write-host ('Starting Second Jobs')
@@ -296,8 +294,6 @@ function Extractor
         Foreach ($Subscription in $Subscriptions)
             { 
                 $InvSub = Receive-Job -Name ('Usage Inventory'+$Subscription.id)
-
-                #$InvSub.ID | Select-Object -Property ID -Unique
 
                 Start-Job -Name ('Cost Processing'+$Subscription.id) -ScriptBlock {
 
@@ -437,19 +433,19 @@ function Report
                 PivotTableName    = "P2"
                 Address           = $excel.Overview.cells["M6"] # top-left corner of the table
                 SourceWorkSheet   = $excel.Usage
-                PivotRows         = @("Resource Group")
+                PivotRows         = @("Location")
                 PivotData         = @{"Cost" = "Sum" }
                 PivotTableStyle   = $tableStyle
                 IncludePivotChart = $true
-                ChartType         = "ColumnClustered"
+                ChartType         = "BarStacked3D"
                 ChartRow          = 2 # place the chart below row 22nd
                 ChartColumn       = 15
                 Activate          = $true
                 ChartTitle        = 'Cost by Resource Group'
                 PivotFilter       = 'Month', 'Subscription'
                 ShowPercent       = $true
-                ChartHeight       = 1000
-                ChartWidth        = 1000
+                ChartHeight       = 500
+                ChartWidth        = 500
                 PivotNumberFormat = "Currency"
                 NoLegend          = $true
             }
