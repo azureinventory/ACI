@@ -2,11 +2,11 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.62                                                                  #
+#       Version: 0.0.63                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
-#       Date: 12/10/2020                                                                 #
+#       Date: 12/11/2020                                                                 #
 #                                                                                        #
 #           https://github.com/RenatoGregio/AzureCostInventory                           #
 #                                                                                        #
@@ -287,7 +287,6 @@ function Extractor
             Get-Job | Wait-Job | Out-Null
         }
 
-
     function DataProcessor 
     {
         Write-host ('Starting Second Jobs')
@@ -307,7 +306,7 @@ function Extractor
                                         $ResourceGroup = $RG.'Resource Group'
                                         $Location = $RG.Location
                                         $ID = $RG.ID
-                                        if($RG.Usage.rows.count -gt 4)
+                                        if($RG.Usage.rows[1].count -eq 4)
                                             {
                                                 Foreach ($Row in $RG.Usage.rows)
                                                     {
@@ -334,7 +333,7 @@ function Extractor
                                             }
                                         else 
                                             {
-                                                $Date0 = [datetime]::ParseExact($RG[1], 'yyyyMMdd', $null)
+                                                $Date0 = [datetime]::ParseExact($RG.Usage.Rows[1], 'yyyyMMdd', $null)
                                                 $WeekDay = $Date0.DayOfWeek
                                                 $Date = (([datetime]$Date0).ToString("MM/dd/yyyy")).ToString()
                                                 $DateMonth = ((Get-Culture).DateTimeFormat.GetMonthName(([datetime]$Date0).ToString("MM"))).ToString()
@@ -349,8 +348,8 @@ function Extractor
                                                         'Day of Week' = [string]$WeekDay;
                                                         'Month' = $DateMonth;
                                                         'Year' = $DateYear;
-                                                        'Currency' = $RG[3];
-                                                        'Cost' = '{0:C}' -f $RG[0]  
+                                                        'Currency' = $RG.Usage.Rows[3];
+                                                        'Cost' = '{0:C}' -f $RG.Usage.Rows[0]  
                                                     }
                                                 $tmp += $obj
                                             }
@@ -423,7 +422,7 @@ function Report
                 ChartRow          = 2 # place the chart below row 22nd
                 ChartColumn       = 3
                 PivotFilter       = 'Subscription', 'Resource Group'
-                ChartTitle        = 'Expenses by Month'
+                ChartTitle        = ('Cost by Month (Currency: '+$Data.currency[0]+')')
                 Activate          = $true
                 NoLegend          = $true
                 ShowPercent       = $true
@@ -447,7 +446,7 @@ function Report
                 ChartColumn       = 3
                 Activate          = $true
                 PivotFilter       = 'Month', 'Resource Group'
-                ChartTitle        = 'Expenses by Subscription'
+                ChartTitle        = ('Cost by Subscription (Currency: '+$Data.currency[0]+')')
                 NoLegend          = $true
                 ShowPercent       = $true
                 ShowCategory      = $false
@@ -470,7 +469,7 @@ function Report
                 ChartRow          = 2 # place the chart below row 22nd
                 ChartColumn       = 15
                 Activate          = $true
-                ChartTitle        = 'Expenses by Location'
+                ChartTitle        = ('Cost by Location (Currency: '+$Data.currency[0]+')')
                 PivotFilter       = 'Month', 'Subscription'
                 ShowPercent       = $true
                 ChartHeight       = 500
@@ -494,7 +493,7 @@ function Report
                 ChartColumn       = 15
                 Activate          = $true
                 PivotFilter       = 'Month', 'Subscription'
-                ChartTitle        = 'Expenses by Day of Week'
+                ChartTitle        = ('Cost by Day of Week (Currency: '+$Data.currency[0]+')')
                 NoLegend          = $true
                 ShowPercent       = $true
                 ShowCategory      = $false
