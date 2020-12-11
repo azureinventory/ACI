@@ -2,7 +2,7 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.60                                                                  #
+#       Version: 0.0.61                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
@@ -309,6 +309,7 @@ function Extractor
                                         if($null -ne $Row[3] -and $Row[3] -ne 0 -and $Row[3] -ne '0' -and $Row[3] -ne '')
                                             {
                                                 $Date0 = [datetime]::ParseExact($Row[1], 'yyyyMMdd', $null)
+                                                $WeekDay = $Date0.DayOfWeek
                                                 $Date = (([datetime]$Date0).ToString("MM/dd/yyyy")).ToString()
                                                 $DateMonth = ((Get-Culture).DateTimeFormat.GetMonthName(([datetime]$Date0).ToString("MM"))).ToString()
                                                 $DateYear = (([datetime]$Date0).ToString("yyyy")).ToString()
@@ -319,6 +320,7 @@ function Extractor
                                                         'Resource Group' = $ResourceGroup;
                                                         'Location' = $Location;
                                                         'Date' = $Date;
+                                                        'Day of Week' = $WeekDay;
                                                         'Month' = $DateMonth;
                                                         'Year' = $DateYear;
                                                         'Currency' = $Row[3];
@@ -335,7 +337,6 @@ function Extractor
         Write-host ('Waiting Second Jobs')
         Get-Job | Wait-Job | Out-Null
     }
-
 
 function DataConsolidation 
     {
@@ -359,7 +360,7 @@ function Report
         ('Currency: '+$Data.currency[0]) | Export-Excel -Path $File -WorksheetName 'Overview' -Style $StyleOver -MoveToStart -KillExcel
 
         $Style0 = New-ExcelStyle -HorizontalAlignment Center -AutoSize 
-        $Style = New-ExcelStyle -HorizontalAlignment Center -AutoSize -NumberFormat 'Currency' -Range H:H
+        $Style = New-ExcelStyle -HorizontalAlignment Center -AutoSize -NumberFormat 'Currency' -Range I:I
         $Style3 = New-ExcelStyle -HorizontalAlignment Center -AutoSize -NumberFormat 'Date-Time' -Range D:D
 
         $Data | 
@@ -368,6 +369,7 @@ function Report
             'Resource Group',
             'Location',
             'Date',
+            'Day of Week',
             'Month',
             'Year',
             'Currency',
@@ -380,6 +382,7 @@ function Report
 
             Write-Debug ('Starting to Generate Charts..')
             $excel = Open-ExcelPackage -Path $File -KillExcel
+
 
             $PTParams = @{
                 PivotTableName    = "P0"
@@ -394,7 +397,7 @@ function Report
                 ChartRow          = 2 # place the chart below row 22nd
                 ChartColumn       = 3
                 PivotFilter       = 'Subscription', 'Resource Group'
-                ChartTitle        = 'Cost by Month'
+                ChartTitle        = 'Expenses by Month'
                 Activate          = $true
                 NoLegend          = $true
                 ShowPercent       = $true
@@ -418,7 +421,7 @@ function Report
                 ChartColumn       = 3
                 Activate          = $true
                 PivotFilter       = 'Month', 'Resource Group'
-                ChartTitle        = 'Cost by Subscription'
+                ChartTitle        = 'Expenses by Subscription'
                 NoLegend          = $true
                 ShowPercent       = $true
                 ShowCategory      = $false
@@ -441,7 +444,7 @@ function Report
                 ChartRow          = 2 # place the chart below row 22nd
                 ChartColumn       = 15
                 Activate          = $true
-                ChartTitle        = 'Cost by Resource Group'
+                ChartTitle        = 'Expenses by Location'
                 PivotFilter       = 'Month', 'Subscription'
                 ShowPercent       = $true
                 ChartHeight       = 500
@@ -452,6 +455,30 @@ function Report
     
             Add-PivotTable @PTParams
 
+            $PTParams = @{
+                PivotTableName    = "P3"
+                Address           = $excel.Overview.cells["M32"] # top-left corner of the table
+                SourceWorkSheet   = $excel.Usage
+                PivotRows         = @("Day of Week")
+                PivotData         = @{"Cost" = "sum" }
+                PivotTableStyle   = $tableStyle
+                IncludePivotChart = $true
+                ChartType         = "ColumnClustered3D"
+                ChartRow          = 28 # place the chart below row 22nd
+                ChartColumn       = 15
+                Activate          = $true
+                PivotFilter       = 'Month', 'Subscription'
+                ChartTitle        = 'Expenses by Day of Week'
+                NoLegend          = $true
+                ShowPercent       = $true
+                ShowCategory      = $false
+                ChartHeight       = 500
+                ChartWidth        = 500
+                PivotNumberFormat = "Currency"
+            }
+    
+            Add-PivotTable @PTParams
+            
             Close-ExcelPackage $excel 
 
     }            
