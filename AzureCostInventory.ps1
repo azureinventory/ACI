@@ -2,7 +2,7 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.63                                                                  #
+#       Version: 0.0.65                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
@@ -382,7 +382,7 @@ function Report
         Write-host ('Starting Reporting')
 
         $StyleOver = New-ExcelStyle -Range A1:AF1 -Bold -FontSize 28 -BackgroundColor ([System.Drawing.Color]::YellowGreen) -Merge -HorizontalAlignment Center
-        ('Currency: '+$Data.currency[0]) | Export-Excel -Path $File -WorksheetName 'Overview' -Style $StyleOver -MoveToStart -KillExcel
+        'Azure Cost Inventory' | Export-Excel -Path $File -WorksheetName 'Overview' -Style $StyleOver -MoveToStart -KillExcel
 
         $Style0 = New-ExcelStyle -HorizontalAlignment Center -AutoSize 
         $Style = New-ExcelStyle -HorizontalAlignment Center -AutoSize -NumberFormat 'Currency' -Range I:I
