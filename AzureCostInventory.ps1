@@ -2,7 +2,7 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.0.65                                                                  #
+#       Version: 0.0.66                                                                  #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
@@ -174,7 +174,7 @@ function Extractor
 
         Get-Job | Remove-Job
 
-        Write-host ('Starting First Jobs')
+        Write-host ('Starting Resource Group Job')
 
         Start-Job -Name 'Resource Group Inventory' -ScriptBlock {
             
@@ -216,6 +216,7 @@ function Extractor
             $Result
             } -ArgumentList $Subscriptions
 
+            Write-host ('Waiting Resource Group Job')
             Get-Job | Wait-Job | Out-Null
 
             $ResourceGroups = Receive-Job -Name 'Resource Group Inventory'
@@ -227,6 +228,7 @@ function Extractor
         $EndDate = ($EndDate.ToString("yyyy-MM-dd")+'T23:59:59').ToString()
         $StartDate = ($StartDate.ToString("yyyy-MM-dd")+'T00:00:00').ToString()
        
+        Write-host ('Starting Consumption Jobs (This is a very heavy step).')
         Foreach ($Subscription in $Subscriptions)
             { 
 
@@ -283,13 +285,13 @@ function Extractor
                 $Result
                 } -ArgumentList $Subscription,$StartDate,$EndDate,$ResourceGroups | Out-Null
             }
-            Write-host ('Waiting First Jobs')
+            Write-host ('Waiting Comsumption Jobs')
             Get-Job | Wait-Job | Out-Null
         }
 
     function DataProcessor 
     {
-        Write-host ('Starting Second Jobs')
+        Write-host ('Starting Data Processing Jobs')
 
         Foreach ($Subscription in $Subscriptions)
             { 
@@ -359,7 +361,7 @@ function Extractor
                     } -ArgumentList $InvSub | Out-Null
             }
 
-        Write-host ('Waiting Second Jobs')
+        Write-host ('Waiting Data processing Jobs')
         Get-Job | Wait-Job | Out-Null
     }
 
@@ -382,7 +384,7 @@ function Report
         Write-host ('Starting Reporting')
 
         $StyleOver = New-ExcelStyle -Range A1:AF1 -Bold -FontSize 28 -BackgroundColor ([System.Drawing.Color]::YellowGreen) -Merge -HorizontalAlignment Center
-        'Azure Cost Inventory' | Export-Excel -Path $File -WorksheetName 'Overview' -Style $StyleOver -MoveToStart -KillExcel
+        ('Azure Cost Inventory') | Export-Excel -Path $File -WorksheetName 'Overview' -Style $StyleOver -MoveToStart -KillExcel
 
         $Style0 = New-ExcelStyle -HorizontalAlignment Center -AutoSize 
         $Style = New-ExcelStyle -HorizontalAlignment Center -AutoSize -NumberFormat 'Currency' -Range I:I
@@ -405,7 +407,6 @@ function Report
 
             <############################################################   CHARTS  ###############################################################################>
 
-            Write-Debug ('Starting to Generate Charts..')
             $excel = Open-ExcelPackage -Path $File -KillExcel
 
 
@@ -473,7 +474,7 @@ function Report
                 PivotFilter       = 'Month', 'Subscription'
                 ShowPercent       = $true
                 ChartHeight       = 500
-                ChartWidth        = 500
+                ChartWidth        = 700
                 PivotNumberFormat = "Currency"
                 NoLegend          = $true
             }
@@ -498,7 +499,7 @@ function Report
                 ShowPercent       = $true
                 ShowCategory      = $false
                 ChartHeight       = 500
-                ChartWidth        = 500
+                ChartWidth        = 700
                 PivotNumberFormat = "Currency"
             }
     
