@@ -2,11 +2,11 @@
 #                                                                                        #
 #                      * Azure Cost Inventory Report Generator *                         #
 #                                                                                        #
-#       Version: 0.1.0                                                                   #
+#       Version: 0.2.0                                                                   #
 #       Authors: Claudio Merola <clvieira@microsoft.com>                                 #
 #                Renato Gregio <renato.gregio@microsoft.com>                             #
 #                                                                                        #
-#       Date: 12/11/2020                                                                 #
+#       Date: 02/02/2020                                                                 #
 #                                                                                        #
 #           https://github.com/RenatoGregio/AzureCostInventory                           #
 #                                                                                        #
@@ -178,6 +178,8 @@ function Extractor
 
         Start-Job -Name 'Resource Group Inventory' -ScriptBlock {
             
+            $job = @()
+
             Foreach ($Subscription in $args)
                 {   
                     $Sub = $Subscription.id
@@ -221,7 +223,14 @@ function Extractor
 
             $ResourceGroups = Receive-Job -Name 'Resource Group Inventory'
 
-        $EndDate = Get-Date -Year $Today.Year -Month $Today.Month -Day ($Today.Day -1) -Hour 23 -Minute 59 -Second 59 -Millisecond 0
+            $TheDay = $Today.Day
+            if($Today.Day = 1)
+                {
+                    $MonthAgo = $Today.AddMonths(-1)
+                    $Day=GET-DATE $MonthAgo.AddMonths(1).AddSeconds(-1)
+                    $TheDay = $Day.Day
+                }
+        $EndDate = Get-Date -Year $Today.Year -Month $Today.Month -Day $TheDay -Hour 23 -Minute 59 -Second 59 -Millisecond 0
         $EndDateMode = Get-Date -Year $Today.Year -Month $Today.Month -Day 1 -Hour 0 -Minute 0 -Second 0 -Millisecond 0
         $StartDate = ($EndDateMode).AddMonths(-$Months)
 
@@ -234,7 +243,7 @@ function Extractor
 
                 Start-Job -Name ('Usage Inventory'+$Subscription.id) -ScriptBlock {
             
-                $Dateset = @'
+                $Dataset = @'
 "{\"totalCost\":{\"name\":\"PreTaxCost\",\"function\":\"Sum\"}}"
 '@
                 $Sub = $($args[0]).id
@@ -251,9 +260,9 @@ function Extractor
                                         New-Variable -Name ('SubRun'+$rg.Name)
                                         New-Variable -Name ('SubJob'+$rg.Name)
 
-                                        Set-Variable -Name ('SubRun'+$rg.Name) -Value ([PowerShell]::Create()).AddScript({param($Scope,$StartDate,$EndDate,$Dateset)
-                                            az costmanagement query --type "Usage" --dataset-aggregation $Dateset --dataset-grouping name="ResourceGroup" type="Dimension" --timeframe "Custom" --time-period from=$StartDate to=$EndDate --scope $Scope | ConvertFrom-Json
-                                        }).AddArgument($Scope).AddArgument($($args[1])).AddArgument($($args[2])).AddArgument($Dateset)
+                                        Set-Variable -Name ('SubRun'+$rg.Name) -Value ([PowerShell]::Create()).AddScript({param($Scope,$StartDate,$EndDate,$Dataset)
+                                            az costmanagement query --type "Usage" --dataset-aggregation $Dataset --dataset-grouping name="ResourceGroup" type="Dimension" --timeframe "Custom" --time-period from=$StartDate to=$EndDate --scope $Scope | ConvertFrom-Json
+                                        }).AddArgument($Scope).AddArgument($($args[1])).AddArgument($($args[2])).AddArgument($Dataset)
                                         
                                         Set-Variable -Name ('SubJob'+$rg.Name) -Value ((get-variable -name ('SubRun'+$rg.Name)).Value).BeginInvoke()
 
